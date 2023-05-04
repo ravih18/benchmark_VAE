@@ -11,6 +11,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
+from torch.cuda.amp import GradScaler, autocast
 
 from ...customexception import ModelError
 from ...data.datasets import BaseDataset
@@ -231,6 +232,15 @@ class BaseTrainer:
 
         self.scheduler = scheduler
 
+    def set_scaler(self):
+        if self.training_config.amp:
+            scaler = GradScaler()
+
+        else:
+            scaler = None
+        
+        self.scaler = scaler
+
     def _set_output_dir(self):
         # Create folder
         if not os.path.exists(self.training_config.output_dir) and self.is_main_process:
@@ -349,8 +359,15 @@ class BaseTrainer:
         loss = model_output.loss
 
         self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
+
+        if self.scaler is not None:
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+
+        else:
+            loss.backward()
+            self.optimizer.step()
 
     def _schedulers_step(self, metrics=None):
         if self.scheduler is None:
@@ -372,6 +389,9 @@ class BaseTrainer:
 
         # set scheduler
         self.set_scheduler()
+
+        # set scaler for amp
+        self.set_scaler
 
         # create folder for saving
         self._set_output_dir()
@@ -594,12 +614,13 @@ class BaseTrainer:
 
             inputs = self._set_inputs_to_device(inputs)
 
-            model_output = self.model(
-                inputs,
-                epoch=epoch,
-                dataset_size=len(self.train_loader.dataset),
-                uses_ddp=self.distributed,
-            )
+            with autocast(enable=self.training_config.amp):
+                model_output = self.model(
+                    inputs,
+                    epoch=epoch,
+                    dataset_size=len(self.train_loader.dataset),
+                    uses_ddp=self.distributed,
+                )
 
             self._optimizers_step(model_output)
 

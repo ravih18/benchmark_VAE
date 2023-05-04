@@ -34,6 +34,7 @@ class BaseTrainerConfig(BaseConfig):
             training. If None, no scheduler is used. Default None.
         scheduler_params (dict): A dict containing the parameters to use for the
             `torch.optim.le_scheduler`. If None, uses the default parameters. Default: None.
+        amp (bool): Wheter to use automatic mixed pecision or not. Default: False
         learning_rate (int): The learning rate applied to the `Optimizer`. Default: 1e-4
         steps_saving (int): A model checkpoint will be saved every `steps_saving` epoch.
             Default: None
@@ -60,6 +61,7 @@ class BaseTrainerConfig(BaseConfig):
     optimizer_params: Union[dict, None] = None
     scheduler_cls: Union[str, None] = None
     scheduler_params: Union[dict, None] = None
+    amp: bool = False
     learning_rate: float = 1e-4
     steps_saving: Union[int, None] = None
     steps_predict: Union[int, None] = None

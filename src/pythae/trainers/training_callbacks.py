@@ -5,6 +5,7 @@ import importlib
 import logging
 
 import numpy as np
+import pandas as pd
 from tqdm.auto import tqdm
 
 from ..models import BaseAEConfig
@@ -237,6 +238,15 @@ class TrainHistoryCallback(MetricConsolePrinterCallback):
             epoch_eval_loss = logs.get("eval_epoch_loss", None)
             self.history["train_loss"].append(epoch_train_loss)
             self.history["eval_loss"].append(epoch_eval_loss)
+
+    def on_train_end(self, training_config: BaseTrainerConfig, **kwargs):
+        # Save file
+        import os
+        metric_df = pd.DataFrame(self.history)
+        tsv_dir = os.path.join(os.path.dirname(training_config.output_dir), "training_logs")
+        if not os.path.exists(tsv_dir):
+            os.mkdir(tsv_dir)
+        metric_df.to_csv(os.path.join(tsv_dir, "training.tsv"), sep="\t")
 
 
 class ProgressBarCallback(TrainingCallback):

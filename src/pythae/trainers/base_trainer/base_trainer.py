@@ -203,6 +203,9 @@ class BaseTrainer:
             shuffle=(train_sampler is None),
             sampler=train_sampler,
             collate_fn=collate_dataset_output,
+            drop_last=(
+                len(train_dataset)%self.training_config.per_device_train_batch_size == 1
+            ),
         )
 
     def get_eval_dataloader(
@@ -221,6 +224,9 @@ class BaseTrainer:
             shuffle=(eval_sampler is None),
             sampler=eval_sampler,
             collate_fn=collate_dataset_output,
+            drop_last=(
+                len(eval_dataset)%self.training_config.per_device_eval_batch_size == 1
+            ),
         )
 
     def set_optimizer(self):

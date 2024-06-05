@@ -115,6 +115,43 @@ class VAE(BaseAE):
 
         return (recon_loss + KLD).mean(dim=0), recon_loss.mean(dim=0), KLD.mean(dim=0)
 
+
+    def predict_sample_latent(self, inputs: BaseDataset, nb_latent_samples, seed) -> list:
+        """The input data is encoded and decoded without computing loss
+
+        Args:
+            inputs (BaseDataset): An instance of pythae's datasets
+            nb_latent_samples (int): Number of outputs to generate by sampling multiple times in the latent space
+            seed (int): Random seed for deterministic sampling
+
+        Returns:
+            list of ModelOutput: An list of ModelOutput containing reconstruction and embedding for
+            each point sampled in the latent space
+        """
+
+        list_outputs = []
+
+        x = inputs
+
+        encoding = self.encoder(x)
+        mu_x = encoding.embedding
+        sigma_x = torch.exp(0.5 * encoding.log_covariance)
+        # Reparameterisation trick
+        eps = torch.normal(
+            0,
+            1,
+            generator=torch.Generator().manual_seed(seed),
+            size=(nb_latent_samples, *mu_x.shape),
+        ).to(mu_x.device)
+        z_samples = mu_x + eps * sigma_x
+        
+        for z in z_samples:
+            reconstruction = self.decoder(z)["reconstruction"]
+            output = ModelOutput(recon_x=reconstruction, embedding=z)
+            list_outputs.append(output)
+                    
+        return list_outputs
+
     def _sample_gauss(self, mu, std):
         # Reparametrization trick
         # Sample N(0, I)

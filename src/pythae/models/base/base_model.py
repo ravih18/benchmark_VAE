@@ -127,7 +127,7 @@ class BaseAE(nn.Module):
         """
         return self(DatasetOutput(data=inputs)).z
 
-    def predict(self, inputs: torch.Tensor) -> ModelOutput:
+    def predict(self, inputs: torch.Tensor, sample_latent=0, seed=None) -> ModelOutput:
         """The input data is encoded and decoded without computing loss
 
         Args:
@@ -136,6 +136,10 @@ class BaseAE(nn.Module):
         Returns:
             ModelOutput: An instance of ModelOutput containing reconstruction and embedding
         """
+        
+        if sample_latent > 0: 
+            return self.predict_sample_latent(inputs, nb_latent_samples=sample_latent, seed=seed)
+        
         z = self.encoder(inputs).embedding
         recon_x = self.decoder(z)["reconstruction"]
 

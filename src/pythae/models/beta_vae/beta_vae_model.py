@@ -85,7 +85,7 @@ class BetaVAE(VAE):
                 recon_x.reshape(x.shape[0], -1),
                 x.reshape(x.shape[0], -1),
                 reduction="none",
-            ).sum(dim=-1)
+            ).mean(dim=-1)
 
         elif self.model_config.reconstruction_loss == "bce":
             recon_loss = F.binary_cross_entropy(
@@ -94,7 +94,13 @@ class BetaVAE(VAE):
                 reduction="none",
             ).sum(dim=-1)
 
-        KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp(), dim=-1)
+        KLD = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp(), dim=-1)
+
+        print("self.model_config.reconstruction_loss = ", self.model_config)
+        print("recon_loss.mean(dim=0) = ", recon_loss.mean(dim=0))
+        print("KLD.mean(dim=0) = ", KLD.mean(dim=0))
+        print("log_var.max()", log_var.max(dim=-1))
+        print("mu.mean()", mu.mean(dim=-1))
 
         return (
             (recon_loss + self.beta * KLD).mean(dim=0),

@@ -12,6 +12,8 @@ import torch.optim.lr_scheduler as lr_scheduler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.distributed import DistributedSampler
+from torch.cuda.amp import GradScaler
+from torch.nn.utils import clip_grad_norm_
 
 from ...customexception import ModelError
 from ...data.datasets import BaseDataset, collate_dataset_output
@@ -239,6 +241,11 @@ class BaseTrainer:
 
         self.optimizer = optimizer
 
+    def set_scaler(self): 
+        scaler = GradScaler()
+
+        self.scaler = scaler
+
     def set_scheduler(self):
         if self.training_config.scheduler_cls is not None:
             scheduler_cls = getattr(lr_scheduler, self.training_config.scheduler_cls)
@@ -371,8 +378,14 @@ class BaseTrainer:
         loss = model_output.loss
 
         self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
+
+        # loss.backward()
+        self.scaler.scale(loss).backward()
+
+        # self.optimizer.step()
+        self.scaler.step(self.optimizer)
+
+        self.scaler.update()
 
     def _schedulers_step(self, metrics=None):
         if self.scheduler is None:
@@ -400,6 +413,9 @@ class BaseTrainer:
 
         # set callbacks
         self._setup_callbacks()
+
+        # set scaler
+        self.set_scaler()
 
     def train(self, log_output_dir: str = None):
         """This function is the main training function
@@ -615,6 +631,8 @@ class BaseTrainer:
         for inputs in self.train_loader:
             inputs = self._set_inputs_to_device(inputs)
 
+            self.optimizer.zero_grad()
+
             with self.amp_context:
                 model_output = self.model(
                     inputs,
@@ -623,9 +641,29 @@ class BaseTrainer:
                     uses_ddp=self.distributed,
                 )
 
-            self._optimizers_step(model_output)
+                loss = model_output.loss
 
-            loss = model_output.loss
+            # Scales loss.  Calls backward() on scaled loss to create scaled gradients.
+            # Backward passes under autocast are not recommended.
+            # Backward ops run in the same dtype autocast chose for corresponding forward ops.
+            self.scaler.scale(loss).backward()
+
+            # Unscales the gradients of optimizer's assigned params in-place
+            self.scaler.unscale_(self.optimizer)
+
+            # Since the gradients of optimizer's assigned params are unscaled, clips as usual:
+            clip_grad_norm_(self.model.parameters(), 1)
+
+            # scaler.step() first unscales the gradients of the optimizer's assigned params.
+            # If these gradients do not contain infs or NaNs, optimizer.step() is then called,
+            # otherwise, optimizer.step() is skipped.
+            self.scaler.step(self.optimizer)
+
+            # Updates the scale for the next iteration
+            self.scaler.update()
+
+            # loss = model_output.loss
+            # self._optimizers_step(model_output)
 
             epoch_loss += loss.item()
 

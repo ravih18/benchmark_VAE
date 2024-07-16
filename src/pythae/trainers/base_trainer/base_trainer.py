@@ -95,6 +95,8 @@ class BaseTrainer:
                 else "cpu"
             )
 
+        self.training_config.amp = True
+
         self.amp_context = (
             torch.autocast("cuda")
             if self.training_config.amp
@@ -633,6 +635,7 @@ class BaseTrainer:
 
             self.optimizer.zero_grad()
 
+            # Runs the forward pass with autocasting.
             with self.amp_context:
                 model_output = self.model(
                     inputs,
@@ -662,8 +665,8 @@ class BaseTrainer:
             # Updates the scale for the next iteration
             self.scaler.update()
 
-            # loss = model_output.loss
             # self._optimizers_step(model_output)
+            # loss = model_output.loss
 
             epoch_loss += loss.item()
 

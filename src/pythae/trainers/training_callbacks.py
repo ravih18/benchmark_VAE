@@ -514,7 +514,7 @@ class MLFlowCallback(TrainingCallback):  # pragma: no cover
             model_config_dict = model_config.to_dict()
 
             if (maps_parameters is not None):
-                maps_parameters_dict = maps_parameters.to_dict()
+                maps_parameters_dict = maps_parameters
 
                 self._mlflow.log_params(
                     {

@@ -95,8 +95,6 @@ class BaseTrainer:
                 else "cpu"
             )
 
-        self.training_config.amp = True
-
         self.amp_context = (
             torch.autocast("cuda")
             if self.training_config.amp
@@ -472,12 +470,16 @@ class BaseTrainer:
 
             metrics = {}
 
-            epoch_train_loss = self.train_step(epoch)
+            epoch_train_loss, train_epoch_recon_loss, train_epoch_kld = self.train_step(epoch)
             metrics["train_epoch_loss"] = epoch_train_loss
+            metrics["train_epoch_recon_loss"] = train_epoch_recon_loss
+            metrics["train_epoch_kld"] = train_epoch_kld
 
             if self.eval_dataset is not None:
-                epoch_eval_loss = self.eval_step(epoch)
+                epoch_eval_loss, eval_epoch_recon_loss, eval_epoch_kld = self.eval_step(epoch)
                 metrics["eval_epoch_loss"] = epoch_eval_loss
+                metrics["eval_epoch_recon_loss"] = eval_epoch_recon_loss
+                metrics["eval_epoch_kld"] = eval_epoch_kld
                 self._schedulers_step(epoch_eval_loss)
 
             else:
@@ -572,6 +574,8 @@ class BaseTrainer:
         self.model.eval()
 
         epoch_loss = 0
+        epoch_recon_loss = 0
+        epoch_kld = 0
 
         with self.amp_context:
             for inputs in self.eval_loader:
@@ -595,8 +599,12 @@ class BaseTrainer:
                     )
 
                 loss = model_output.loss
+                recon_loss = model_output.recon_loss
+                kld = model_output.reg_loss
 
                 epoch_loss += loss.item()
+                epoch_recon_loss += recon_loss.item()
+                epoch_kld += kld.item()
 
                 if epoch_loss != epoch_loss:
                     raise ArithmeticError("NaN detected in eval loss")
@@ -606,8 +614,10 @@ class BaseTrainer:
                 )
 
         epoch_loss /= len(self.eval_loader)
+        epoch_recon_loss /= len(self.eval_loader)
+        epoch_kld /= len(self.eval_loader)
 
-        return epoch_loss
+        return epoch_loss, epoch_recon_loss, epoch_kld
 
     def train_step(self, epoch: int):
         """The trainer performs training loop over the train_loader.
@@ -629,6 +639,8 @@ class BaseTrainer:
         self.model.train()
 
         epoch_loss = 0
+        epoch_recon_loss = 0
+        epoch_kld = 0
 
         for inputs in self.train_loader:
             inputs = self._set_inputs_to_device(inputs)
@@ -645,6 +657,8 @@ class BaseTrainer:
                 )
 
                 loss = model_output.loss
+                recon_loss = model_output.recon_loss
+                kld = model_output.reg_loss
 
             # Scales loss.  Calls backward() on scaled loss to create scaled gradients.
             # Backward passes under autocast are not recommended.
@@ -669,6 +683,8 @@ class BaseTrainer:
             # loss = model_output.loss
 
             epoch_loss += loss.item()
+            epoch_recon_loss += recon_loss.item()
+            epoch_kld += kld.item()
 
             if epoch_loss != epoch_loss:
                 raise ArithmeticError("NaN detected in train loss")
@@ -684,8 +700,10 @@ class BaseTrainer:
             self.model.update()
 
         epoch_loss /= len(self.train_loader)
+        epoch_recon_loss /= len(self.eval_loader)
+        epoch_kld /= len(self.eval_loader)
 
-        return epoch_loss
+        return epoch_loss, epoch_recon_loss, epoch_kld
 
     def save_model(self, model: BaseAE, dir_path: str):
         """This method saves the final model along with the config files

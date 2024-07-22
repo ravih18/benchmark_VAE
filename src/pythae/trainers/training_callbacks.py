@@ -208,6 +208,10 @@ class MetricConsolePrinterCallback(TrainingCallback):
         if logger is not None and (rank == -1 or rank == 0):
             epoch_train_loss = logs.get("train_epoch_loss", None)
             epoch_eval_loss = logs.get("eval_epoch_loss", None)
+            train_epoch_recon_loss = logs.get("train_epoch_recon_loss", None)
+            train_epoch_kld = logs.get("train_epoch_kld", None)
+            eval_epoch_recon_loss = logs.get("eval_epoch_recon_loss", None)
+            eval_epoch_kld = logs.get("eval_epoch_kld", None)
 
             logger.info(
                 "--------------------------------------------------------------------------"
@@ -216,6 +220,14 @@ class MetricConsolePrinterCallback(TrainingCallback):
                 logger.info(f"Train loss: {np.round(epoch_train_loss, 4)}")
             if epoch_eval_loss is not None:
                 logger.info(f"Eval loss: {np.round(epoch_eval_loss, 4)}")
+            if train_epoch_recon_loss is not None:
+                logger.info(f"Train reconstruction loss: {np.round(train_epoch_recon_loss, 4)}")
+            if train_epoch_kld is not None:
+                logger.info(f"Train KL divergence: {np.round(train_epoch_kld, 4)}")
+            if eval_epoch_recon_loss is not None:
+                logger.info(f"Eval reconstruction loss: {np.round(eval_epoch_recon_loss, 4)}")
+            if eval_epoch_kld is not None:
+                logger.info(f"Eval KL divergence: {np.round(eval_epoch_kld, 4)}")
             logger.info(
                 "--------------------------------------------------------------------------"
             )
@@ -227,7 +239,14 @@ class TrainHistoryCallback(MetricConsolePrinterCallback):
         super().__init__()
 
     def on_train_begin(self, training_config: BaseTrainerConfig, **kwargs):
-        self.history = {"train_loss": [], "eval_loss": []}
+        self.history = {
+            "train_loss": [],
+            "eval_loss": [],
+            "train_recon_loss": [],
+            "train_kld": [], 
+            "eval_recon_loss": [], 
+            "eval_kld": [],
+        }
 
     def on_log(self, training_config: BaseTrainerConfig, logs, **kwargs):
         logger = kwargs.pop("logger", self.logger)
@@ -235,8 +254,17 @@ class TrainHistoryCallback(MetricConsolePrinterCallback):
         if logger is not None:
             epoch_train_loss = logs.get("train_epoch_loss", None)
             epoch_eval_loss = logs.get("eval_epoch_loss", None)
+            train_epoch_recon_loss = logs.get("train_epoch_recon_loss", None)
+            train_epoch_kld = logs.get("train_epoch_kld", None)
+            eval_epoch_recon_loss = logs.get("eval_epoch_recon_loss", None)
+            eval_epoch_kld = logs.get("eval_epoch_kld", None)            
             self.history["train_loss"].append(epoch_train_loss)
             self.history["eval_loss"].append(epoch_eval_loss)
+            self.history["train_recon_loss"].append(train_epoch_recon_loss)
+            self.history["train_kld"].append(train_epoch_kld)
+            self.history["eval_loss"].append(epoch_eval_loss)
+            self.history["eval_recon_loss"].append(eval_epoch_recon_loss)
+            self.history["eval_kld"].append(eval_epoch_kld)
 
 
 class ProgressBarCallback(TrainingCallback):
@@ -479,16 +507,32 @@ class MLFlowCallback(TrainingCallback):  # pragma: no cover
         logger.info(
             f"MLflow run started with run_id={self._mlflow.active_run().info.run_id}"
         )
-        if model_config is not None:
+        
+        maps_parameters = kwargs.pop("maps_parameters", None)
+        
+        if (model_config is not None):
             model_config_dict = model_config.to_dict()
 
-            self._mlflow.log_params(
-                {
-                    **training_config_dict,
-                    **model_config_dict,
-                }
-            )
+            if (maps_parameters is not None):
+                maps_parameters_dict = maps_parameters.to_dict()
 
+                self._mlflow.log_params(
+                    {
+                        **training_config_dict,
+                        **model_config_dict,
+                        **maps_parameters_dict,
+                    }
+                )
+            
+            else:
+                self._mlflow.log_params(
+                    {
+                        **training_config_dict,
+                        **model_config_dict,
+                        **maps_parameters_dict,
+                    }
+                )
+        
         else:
             self._mlflow.log_params({**training_config_dict})
 

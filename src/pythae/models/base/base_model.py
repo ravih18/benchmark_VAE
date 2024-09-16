@@ -146,6 +146,28 @@ class BaseAE(nn.Module):
 
         return output
 
+    def predict(self, inputs: BaseDataset, **kwargs) -> ModelOutput:
+        """The input data is encoded and decoded without computing loss
+
+        Args:
+            inputs (BaseDataset): An instance of pythae's datasets
+
+        Returns:
+            ModelOutput: An instance of ModelOutput containing reconstruction and embedding
+        """
+
+        x = inputs["data"]
+
+        z = self.encoder(x).embedding
+        recon_x = self.decoder(z)["reconstruction"]
+
+        output = ModelOutput(
+            recon_x=recon_x,
+            embedding=z,
+        )
+
+        return output
+
     def interpolate(
         self,
         starting_inputs: torch.Tensor,
